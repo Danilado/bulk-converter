@@ -140,6 +140,10 @@ def main():
     conversions = unique(conversions)
     print_conversions(conversions)
 
+    if len(conversions) == 0:
+        print("Could not find files to replace")
+        return 0
+
     conf1 = input(
         "Do you want to convert the files?\n" +
         "Type YES in caps, to proceed\n" +
