@@ -1,181 +1,226 @@
-from multiprocessing.pool import ThreadPool
-import ffmpeg
+import platform
+from typing import Tuple
+from modules.FsScanner import FsScanner
+from modules.Converter import Converter
 import os
-import sys
-from typing import Tuple, Iterator
+from pathlib import Path
 
 
-FORMAT_MAP = {
-    ".mp4": ".webm",
-    ".mov": ".webm",
-    ".mkv": ".webm",
-    ".png": ".webp",
-    ".jpg": ".webp",
-    ".jpeg": ".webp",
-}
+class App:
+    def __init__(self) -> None:
+        self.scanner = FsScanner()
+        self.converter = Converter()
+        self.running: bool = False
 
-FORBIDDEN_PREFIXES = ["."]
+        self.menu_items = {
+            1: ("Add file extension associations", self.add_target_types),
+            2: ("Add forbidden prefixes", self.add_forbidden_prefixes),
+            3: ("Add forbidden suffixes", self.add_forbidden_suffixes),
+            4: ("Add target folders", self.add_target_folders),
+            5: ("Scan target folders for matching files", self.scan),
+            6: ("Remove files from list by index", self.remove_by_indexes),
+            7: ("Convert files in list", self.convert_all),
+            8: ("Toggle delete originals", self.toggle_delete_orig),
+            0: ("Exit", self.stop)
+        }
 
+        self.target_folders: list[Path] = []
+        self.targets: list[Path] = []
 
-def forbidden(filename: str) -> bool:
-    return any(filename.startswith(prefix) for prefix in FORBIDDEN_PREFIXES)
+        self.delete_originals: bool = False
 
+    def toggle_delete_orig(self) -> None:
+        self.delete_originals = not self.delete_originals
 
-def delete_file(filename: str) -> None:
-    if os.path.isfile(filename) or os.path.islink(filename):
-        os.unlink(filename)
+    def add_target_types(self) -> None:
+        print(f"Input two or more file extensions first->from; other->to")
+        data = input("> ").strip().split()
 
+        if len(data) < 2:
+            return
 
-def get_subdirs(dir_path: str) -> list[str]:
-    # for filename in os.listdir(dir_path):
-    #     print(os.path.join(dir_path, filename),
-    #           os.path.isdir(os.path.join(dir_path, filename)), forbidden(filename))
-    try:
-        return sorted(
-            list(
-                filter(
-                    lambda name: os.path.isdir(
-                        os.path.join(dir_path, name)) and not forbidden(name),
-                    map(
-                        lambda filename: os.fsdecode(filename),
-                        os.listdir(os.fsencode(dir_path))
-                    )
-                )
-            )
-        )
-    except:
-        return []
+        types = [t if t.startswith(".") else "." + t for t in data]
 
+        self.scanner.add_target_type(types[0])
+        for t in types[1:]:
+            self.converter.add_conversion(types[0], t)
 
-def convert(pair: Tuple[str, str]):
-    stream = ffmpeg.input(pair[0])
-    stream = ffmpeg.output(stream, pair[1])
-    ffmpeg.run(stream)
+    def add_forbidden_prefixes(self) -> None:
+        print(f"Input prefixes (separated with spacebar)")
+        print(f"Files and folders starting with prefix will be ignored")
+        data = input("> ").strip().split()
 
+        for prefix in data:
+            self.scanner.add_forbidden_prefix(prefix)
 
-def pair_exists(pair: Tuple[str, str]):
-    return os.path.exists(pair[0]) and os.path.exists(pair[1])
+    def add_forbidden_suffixes(self) -> None:
+        print(f"Input suffixes (separated with spacebar)")
+        print(f"Files and folders ending with suffix will be ignored")
+        data = input("> ").strip().split()
 
+        for suffix in data:
+            self.scanner.add_forbidden_suffix(suffix)
 
-def check_files(path: str) -> list[Tuple[str, str]]:
-    res: list[Tuple[str, str]] = []
+    def add_target_folders(self) -> None:
+        print(f"Input folder names to scan")
+        data = input("> ").strip().split()
 
-    try:
-        for filename in os.listdir(path):
-            for key in FORMAT_MAP.keys():
-                if filename.endswith(key) and not forbidden(filename):
-                    filepath = os.path.abspath(os.path.join(path, filename))
-                    pair = \
-                        (filepath, filepath.removesuffix(
-                            key) + FORMAT_MAP[key])
-                    if not pair_exists(pair):
-                        res.append(pair)
-    except:
-        ...
+        for folder in data:
+            fpath = Path(folder).resolve()
+            if not fpath.exists():
+                print(f"Folder {fpath} not found")
+                continue
+            if not fpath.is_dir():
+                print(f"{fpath} is not a folder")
+                continue
+            if fpath in self.target_folders:
+                print(f"{fpath} already in list")
+                continue
 
-    return res
+            self.target_folders.append(fpath)
 
+    def scan(self) -> None:
+        if len(self.target_folders) == 0:
+            print(f"No folders to scan")
+            return
 
-def get_conversions(path: str) -> list[Tuple[str, str]]:
-    print("Checking", path)
+        for folder in self.target_folders:
+            res = self.scanner.scan_dir(folder)
+            print(f"{folder} - {len(res)} matching files")
 
-    res: list[Tuple[str, str]] = check_files(path)
+            for file in res:
+                if file in self.targets:
+                    print(f"{file} already in list")
+                else:
+                    self.targets.append(file)
 
-    subdirs = get_subdirs(path)
-    for subdir in subdirs:
-        res += get_conversions(os.path.join(path, subdir))
+        self.target_folders = []
 
-    return res
+        for target in self.targets:
+            self.converter.resolve_file(target)
 
+    def list_targets(self) -> None:
+        self.converter.print_conversions()
 
-def get_path() -> Iterator[str]:
-    args = sys.argv
+    def remove_by_indexes(self) -> None:
+        if len(self.targets) == 0:
+            print(f"List already empty")
+            return
 
-    if len(args) == 1:
-        yield "./"
-        return "fin"
+        self.list_targets()
+        data = input(
+            "Input indexes of files to remove from list\n> ").strip().split()
 
-    for arg in args[1:]:
-        yield arg
-    return "fin"
+        rmlist: list[int] = []
+        for entry in data:
+            try:
+                n = int(entry)
+                if n > 0 and n <= len(self.converter.conversions) and n - 1 not in rmlist:
+                    rmlist.append(n - 1)
+            except ValueError:
+                continue
 
+        self.converter.remove_conversions(rmlist)
 
-def print_conversions(conversions: list[Tuple[str, str]]):
-    for conversion in conversions:
-        print(f"""\"{conversion[0]}\" → \"{conversion[1]}\"""")
+    def convert_all(self) -> None:
+        rc = self.converter.convert_all()
 
+        print(f"Finished converting with {rc} errors")
 
-def unique(arr: list) -> list:
-    return [x for i, x in enumerate(arr) if i == arr.index(x)]
+        if not rc and self.delete_originals:
+            for target in self.targets:
+                try:
+                    delete_file(target)
+                except:
+                    ...
 
+        self.targets = []
 
-def convert_all(conversions: list[Tuple[str, str]], processes: int = 2):
-    errors = 0
-    with ThreadPool(processes=processes) as pool:
+    def print_menu(self) -> None:
+        for key in self.menu_items.keys():
+            print(f"{key}:\t{self.menu_items[key][0]}")
+
+    def print_status(self) -> None:
+        print(f"Delete original files: {self.delete_originals}")
+
+        print(f"Target file extensions:")
+        if len(self.scanner.target_types) == 0:
+            print("\tAny")
+        else:
+            for text in self.scanner.target_types:
+                print(f"\t{text}")
+
+        print(f"Forbidden prefixes:")
+        if len(self.scanner.forbidden_prefixes) == 0:
+            print("\tNone")
+        else:
+            for text in self.scanner.forbidden_prefixes:
+                print(f"\t{text}")
+
+        print(f"Forbidden suffixes:")
+        if len(self.scanner.forbidden_suffixes) == 0:
+            print("\tNone")
+        else:
+            for text in self.scanner.forbidden_suffixes:
+                print(f"\t{text}")
+
+        print(f"Target folders:")
+        if len(self.target_folders) == 0:
+            print("\tNone")
+        else:
+            for folder in self.target_folders:
+                print(f"\t{folder.resolve()}")
+
+        print(f"Target files:")
+        if len(self.targets) == 0:
+            print("\tNone")
+        else:
+            for file in self.targets:
+                print(f"\t{file.resolve()}")
+
+        print(f"Target conversions:")
+        self.converter.print_conversions()
+
+        print()
+
+    def menu(self) -> None:
+        self.print_status()
+        self.print_menu()
+
         try:
-            pool.map(convert, conversions)
-        except:
-            errors += 1
+            option = int(input("> "))
+        except ValueError:
+            option = None
 
-    print(f"{errors=}")
+        if option not in self.menu_items.keys():
+            return
+
+        if platform.system() == "Windows":
+            os.system("cls")
+        else:
+            os.system("clear")
+
+        self.menu_items[option][1]()
+
+    def run(self) -> int:
+        self.running = True
+
+        while self.running:
+            self.menu()
+
+        return 0
+
+    def stop(self) -> None:
+        self.running = False
 
 
-def remove_originals(conversions: list[Tuple[str, str]]):
-    errors = 0
-    for conversion in conversions:
-        try:
-            delete_file(conversion[0])
-        except:
-            errors += 1
-
-    print(f"{errors=}")
+def delete_file(file: Path) -> None:
+    file.unlink()
 
 
 def main():
-    conversions = []
-    for path in get_path():
-        conversions += get_conversions(path)
-        print()
-
-    conversions = unique(conversions)
-    print_conversions(conversions)
-
-    if len(conversions) == 0:
-        print("Could not find files to replace")
-        return 0
-
-    conf1 = input(
-        "Do you want to convert the files?\n" +
-        "Type YES in caps, to proceed\n" +
-        "> ")
-
-    if conf1 != "YES":
-        print("A wise decision, have a great day")
-        return 0
-
-    conf2 = input(
-        "Do you want to remove the original files afterwards?\n" +
-        "Type YES in caps if you want to (this feature was not tested, make a backup just in case)\n" +
-        "> ")
-
-    print("This may take a very long time\n100 1 minute files from mp4 to webm took 7 hrs for me\nBe patient...")
-    procs = input(
-        "How many processes would you like to run in parallel? default = 2\n>")
-
-    try:
-        procs = int(procs)
-    except:
-        procs = 2
-
-    if procs < 1:
-        procs = 1
-
-    convert_all(conversions, processes=procs)
-
-    if conf2 == "YES":
-        remove_originals(conversions)
-
-    return 0
+    app = App()
+    return app.run()
 
 
 if __name__ == "__main__":
