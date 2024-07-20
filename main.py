@@ -239,6 +239,18 @@ def main():
     app = App()
     return app.run()
 
+    # app.converter.add_conversion(".mp4", ".webm")
+    # app.converter.add_conversion(".mkv", ".webm")
+    # app.converter.add_conversion(".mov", ".webm")
+    # app.converter.add_conversion(".giv", ".webm")
+    # app.converter.add_conversion(".flv", ".webm")
+    # app.converter.add_conversion(".ogg", ".webm")
+    # app.converter.add_conversion(".avi", ".webm")
+    # app.target_folders.append(".")
+    # app.delete_originals = True
+    # app.scan()
+    # app.convert_all()
+
 
 if __name__ == "__main__":
     main()

@@ -1,7 +1,8 @@
 from multiprocessing.pool import ThreadPool
 from typing import Tuple
 from pathlib import Path
-import ffmpeg
+import ffpb
+from .MultilineOutputManager import MultilineOutputManager
 
 # FORMAT_MAP = {
 #     ".mp4": ".webm",
@@ -15,21 +16,24 @@ import ffmpeg
 
 class Converter:
     def __init__(self):
+        self.mom: MultilineOutputManager = MultilineOutputManager()
         self.format_associations: map[str, list[str]] = {}
         self.conversions: list[Path, Path] = []
         self.threads = 2
 
     def convert(self, pair: Tuple[Path, Path]):
+        dststream = self.mom.request_line()
+
         if self.pair_exists(pair):
-            print("Pair already exists -- ", end="")
-            self.print_pair(pair)
+            dststream.write(f"""\"{pair[1]}\" already exists -- skipping""")
+            dststream.close()
             return
 
-        print(f"Processing {pair[1]}...")
+        dststream.write(f"Processing {pair[1]}...")
 
-        stream = ffmpeg.input(str(pair[0]))
-        stream = ffmpeg.output(stream, str(pair[1]), loglevel="error")
-        ffmpeg.run(stream)
+        ffpb.main(["-i", pair[0], pair[1]], dststream)
+
+        dststream.close()
 
     def pair_exists(self, pair: Tuple[Path, Path]):
         return pair[0].exists() and pair[1].exists()
@@ -41,6 +45,9 @@ class Converter:
                     pair = (path, path.with_suffix(suf))
                     if pair not in self.conversions:
                         self.conversions.append(pair)
+
+    def print_pair(self, pair: Tuple[Path, Path]):
+        print(f"""\"{pair[0]}\" → \"{pair[1]}\"""")
 
     def print_conversions(self) -> None:
         for i, conversion in enumerate(self.conversions):
@@ -61,11 +68,16 @@ class Converter:
     def convert_all(self) -> int:
         rc = 0
 
+        l = self.mom.request_line()
+        l.write("Processing... -----------------------------")
+
         with ThreadPool(processes=self.threads) as pool:
             # try:
             pool.map(self.convert, self.conversions)
             # except:
             #     rc += 1
+
+        l.close()
 
         self.conversions = []
 
