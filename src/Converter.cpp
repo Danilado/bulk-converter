@@ -104,8 +104,11 @@ void FFmpegRunner::analyzeProgressbar(const std::string &str) {
       return;
 
     double progress = time / m_duration;
-    m_callback(std::format("{} {} {}%", out_file,
-                           ::generateProgressBar(40, progress),
-                           ::percent(progress)));
+    int perc = percent(progress);
+    if (m_prev_percent != perc) {
+      m_prev_percent = perc;
+      m_callback(std::format("{} {} {}%", out_file,
+                             generateProgressBar(40, progress), perc));
+    }
   }
 }

@@ -24,6 +24,7 @@ public:
 private:
   std::function<void(const std::string &)> m_callback;
   double m_duration = 0;
+  int m_prev_percent = -1;
   std::string out_file;
   fs::path m_input;
   bp::child m_subprocess;

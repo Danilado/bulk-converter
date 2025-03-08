@@ -60,7 +60,6 @@ void getWhitelistedFiles(const fs::path &root, std::vector<fs::path> &out) {
 
 int main(int argc, char *argv[]) {
   setlocale(LC_ALL, "Russian");
-  std::cout.tie();
 
   fs::path workingDir;
   int threads = 4;
