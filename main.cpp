@@ -60,6 +60,7 @@ void getWhitelistedFiles(const fs::path &root, std::vector<fs::path> &out) {
 
 int main(int argc, char *argv[]) {
   setlocale(LC_ALL, "Russian");
+  std::cout.tie();
 
   fs::path workingDir;
   int threads = 4;
@@ -114,10 +115,21 @@ int main(int argc, char *argv[]) {
       MultilinePrinter("==================================== Processing... "
                        "====================================");
 
+  auto start = std::chrono::high_resolution_clock::now();
+
   for (const auto &file : candidates) {
     boost::asio::post(pool,
                       [&file, &mp]() { processFile(file, mp.getStream("")); });
   }
+
+  pool.join();
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> duration = end - start;
+
+  mp.setHeader("======================================== Done! "
+               "========================================");
+  std::cout << "Converting took " << duration.count() << " seconds"
+            << std::endl;
 
   if (candidates.size()) {
     std::cout << "Remove old files? [N/y] ";
@@ -127,9 +139,6 @@ int main(int argc, char *argv[]) {
       for (const auto &file : candidates)
         fs::remove(file, ec);
   }
-
-  mp.setHeader("======================================== Done! "
-               "========================================");
 
   return 0;
 }

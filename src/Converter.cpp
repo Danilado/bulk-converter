@@ -42,7 +42,6 @@ std::string formatName(const std::string &str, int length) {
 } // namespace
 
 void FFmpegRunner::run() {
-  namespace bp = boost::process;
   bp::ipstream pipe_stream;
 
   if (!fs::exists(m_input)) {

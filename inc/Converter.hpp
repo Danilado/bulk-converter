@@ -6,6 +6,7 @@
 #include <string>
 #include <unordered_map>
 
+namespace bp = boost::process;
 namespace fs = boost::filesystem;
 
 class FFmpegRunner {
@@ -13,6 +14,11 @@ public:
   FFmpegRunner(const fs::path &inputFile,
                std::function<void(const std::string &)> callback)
       : m_callback(callback), m_input(inputFile){};
+  ~FFmpegRunner() {
+    if (m_subprocess.running())
+      m_subprocess.terminate();
+  }
+
   void run();
 
 private:
@@ -20,6 +26,7 @@ private:
   double m_duration = 0;
   std::string out_file;
   fs::path m_input;
+  bp::child m_subprocess;
 
   void analyzeProgressbar(const std::string &);
 

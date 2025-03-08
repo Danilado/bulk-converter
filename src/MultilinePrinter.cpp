@@ -22,6 +22,7 @@ void LineStream::connectToOnUpdate(const std::function<void(std::string)> &f) {
 }
 
 LineStream &LineStream::operator<<(const std::string &str) {
+  auto lock = std::scoped_lock(m_mutex);
   m_text = str;
   for (const auto &callback : m_onUpdate)
     callback(str);
@@ -69,15 +70,19 @@ void MultilinePrinter::print() {
 void MultilinePrinter::update() {
   auto lock = std::scoped_lock(m_mutex);
 
-  eraseLines(m_streams.size() + !m_header.empty() - m_offset);
-  m_offset = 0;
+  eraseLines(m_streams.size() + !m_header.empty());
 
   print();
 }
 
 void MultilinePrinter::setHeader(const std::string &str) {
+  auto lock = std::scoped_lock(m_mutex);
+
   m_header = str;
-  update();
+
+  eraseLines(m_streams.size() + !m_header.empty());
+
+  print();
 }
 
 LineStreamPtr MultilinePrinter::getStream(const std::string &startmsg) {
@@ -86,9 +91,10 @@ LineStreamPtr MultilinePrinter::getStream(const std::string &startmsg) {
                                   std::placeholders::_1));
   res->connectToOnUpdate(std::bind(&MultilinePrinter::update, this));
 
+  auto lock = std::scoped_lock(m_mutex);
   m_streams.push_back(res);
-  m_offset.fetch_add(1);
-  update();
+  eraseLines(m_streams.size() + !m_header.empty() - 1);
+  print();
 
   return res;
 }
