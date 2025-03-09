@@ -6,10 +6,30 @@
 #include <iostream>
 #include <ranges>
 #include <thread>
+#if defined(_WIN32) || defined(_WIN64)
+#include <windows.h>
+#endif
 
 namespace po = boost::program_options;
 
 namespace {
+
+#if defined(_WIN32) || defined(_WIN64)
+void enableAnsiEscapeCodes() {
+  HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+  if (hOut == INVALID_HANDLE_VALUE)
+    return;
+
+  DWORD mode;
+  if (!GetConsoleMode(hOut, &mode))
+    return;
+
+  SetConsoleMode(hOut, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+}
+#else
+void enableAnsiEscapeCodes() {} // Для Linux/macOS ничего не нужно делать
+#endif
+
 void processFile(fs::path filename, LineStreamPtr out) {
   FFmpegRunner fmpr(filename,
                     [out](const std::string &str) { out->print(str); });
@@ -60,6 +80,7 @@ void getWhitelistedFiles(const fs::path &root, std::vector<fs::path> &out) {
 
 int main(int argc, char *argv[]) {
   setlocale(LC_ALL, "Russian");
+  enableAnsiEscapeCodes();
 
   fs::path workingDir;
   int threads = 4;
