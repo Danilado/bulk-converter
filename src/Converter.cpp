@@ -82,7 +82,10 @@ void FFmpegRunner::run() {
   std::string line;
 
   while (pipe_stream && std::getline(pipe_stream, line)) {
-    analyzeProgressbar(line);
+    try {
+      analyzeProgressbar(line);
+    } catch (...) {
+    }
   }
 
   ffmpeg.wait();
@@ -100,10 +103,10 @@ void FFmpegRunner::analyzeProgressbar(const std::string &str) {
     m_duration = time;
   } else if ((pos = str.find("out_time=")) != std::string::npos) {
     double time = ::parseTimeToSeconds(str.substr(pos + 9, 15));
-    if (time < 0)
+    if (time < 0 || m_duration < 0)
       return;
 
-    double progress = time / m_duration;
+    double progress = std::clamp(time / m_duration, 0., 1.);
     int perc = percent(progress);
     if (m_prev_percent != perc) {
       m_prev_percent = perc;
