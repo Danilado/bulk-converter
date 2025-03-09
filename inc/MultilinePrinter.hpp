@@ -1,6 +1,5 @@
 #pragma once
 
-#include <atomic>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -11,10 +10,11 @@
 
 class LineStream {
 private:
+  std::string m_text;
+
   std::vector<std::function<void(std::string)>> m_onUpdate;
   std::vector<std::function<void(std::string)>> m_onClose;
-
-  std::string m_text;
+  std::mutex m_mutex;
 
 public:
   LineStream(const std::string &defaultText = "") : m_text(defaultText){};
@@ -36,7 +36,6 @@ private:
   std::mutex m_mutex;
   std::vector<LineStreamWPtr> m_streams;
   std::string m_header = "";
-  std::atomic<int> m_offset = 0;
 
   void handleStreamClose(const std::string &);
   void update();
@@ -44,6 +43,7 @@ private:
 
 public:
   MultilinePrinter(const std::string &header) : m_header(header) {
+    auto lock = std::scoped_lock(m_mutex);
     if (header.size())
       std::cout << header << std::endl;
   };

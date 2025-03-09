@@ -42,7 +42,6 @@ std::string formatName(const std::string &str, int length) {
 } // namespace
 
 void FFmpegRunner::run() {
-  namespace bp = boost::process;
   bp::ipstream pipe_stream;
 
   if (!fs::exists(m_input)) {
@@ -83,7 +82,10 @@ void FFmpegRunner::run() {
   std::string line;
 
   while (pipe_stream && std::getline(pipe_stream, line)) {
-    analyzeProgressbar(line);
+    try {
+      analyzeProgressbar(line);
+    } catch (...) {
+    }
   }
 
   ffmpeg.wait();
@@ -101,12 +103,15 @@ void FFmpegRunner::analyzeProgressbar(const std::string &str) {
     m_duration = time;
   } else if ((pos = str.find("out_time=")) != std::string::npos) {
     double time = ::parseTimeToSeconds(str.substr(pos + 9, 15));
-    if (time < 0)
+    if (time < 0 || m_duration < 0)
       return;
 
-    double progress = time / m_duration;
-    m_callback(std::format("{} {} {}%", out_file,
-                           ::generateProgressBar(40, progress),
-                           ::percent(progress)));
+    double progress = std::clamp(time / m_duration, 0., 1.);
+    int perc = percent(progress);
+    if (m_prev_percent != perc) {
+      m_prev_percent = perc;
+      m_callback(std::format("{} {} {}%", out_file,
+                             generateProgressBar(40, progress), perc));
+    }
   }
 }
