@@ -39,6 +39,19 @@ std::string formatName(const std::string &str, int length) {
   }
 }
 
+void copyDates(const fs::path &source, const fs::path &target) {
+  std::string command =
+      std::format("exiftool -q -TagsFromFile \"{}\" -FileModifyDate "
+                  "-FileCreateDate -overwrite_original \"{}\"",
+                  source.string(), target.string());
+
+  try {
+    bp::child exif(command);
+    exif.wait();
+  } catch (...) {
+  }
+}
+
 } // namespace
 
 void FFmpegRunner::run() {
@@ -62,13 +75,13 @@ void FFmpegRunner::run() {
   // boost::filesystem::remove(output, ec);
 
   if (fs::exists(output)) {
+    copyDates(m_input, output);
     m_callback(
         std::format("File {} already exists. Skipping...", output.string()));
     return;
   }
 
   m_callback(std::format("Starting conversion for {}", output.string()));
-
   std::string command = std::format(
       "ffmpeg -err_detect ignore_err -i \"{}\" \"{}\" -progress pipe:2",
       m_input.string(), output.string());
@@ -91,6 +104,8 @@ void FFmpegRunner::run() {
   ffmpeg.wait();
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> duration = end - start;
+
+  copyDates(m_input, output);
 
   m_callback(
       std::format("{} done in {} seconds", output.string(), duration.count()));
