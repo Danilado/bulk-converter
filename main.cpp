@@ -130,11 +130,10 @@ int main(int argc, char *argv[]) {
   std::cout << "Converting took " << duration.count() << " seconds"
             << std::endl;
 
-  if (candidates.size()) {
-    std::cout << "Remove old files? [N/y] ";
-    char opt;
-    std::cin >> opt;
-    if (opt == 'y' || opt == 'Y')
+  std::cout << "Remove old files? [N/y] ";
+  std::string opt;
+  if (getline(std::cin, opt)) {
+    if (opt == "y" || opt == "Y")
       for (const auto &file : candidates)
         fs::remove(file, ec);
   }
