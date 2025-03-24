@@ -47,7 +47,8 @@ void copyDates(const fs::path &source, const fs::path &target) {
 
   try {
     bp::child exif(command);
-    exif.wait();
+    if (!exif.wait_for(std::chrono::seconds(10)))
+      exif.detach();
   } catch (...) {
   }
 }
